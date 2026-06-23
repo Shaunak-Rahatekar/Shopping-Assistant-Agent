@@ -5,7 +5,11 @@ from app.agent import (
     award_loyalty_points,
     AwardPointsSchema,
     user_loyalty_points,
-    processed_transactions
+    processed_transactions,
+    process_cart_checkout,
+    ProcessCheckoutSchema,
+    mock_carts,
+    processed_orders
 )
 
 @pytest.fixture(autouse=True)
@@ -14,6 +18,10 @@ def reset_state():
     redeemed_codes.clear()
     user_loyalty_points.clear()
     processed_transactions.clear()
+    processed_orders.clear()
+    mock_carts.clear()
+    mock_carts["cart_123"] = {"user_id": "user_123", "total": 100.0}
+    mock_carts["cart_456"] = {"user_id": "user_456", "total": 200.0}
 
 def test_security_boundary_missing_user_id():
     """Test that redemption fails if an empty or missing user_id is provided."""
@@ -75,3 +83,43 @@ def test_award_loyalty_points_zero_points_validation():
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         AwardPointsSchema(user_id="user_123", points=0, transaction_id="tx_3")
+
+def test_checkout_idor_protection():
+    req = ProcessCheckoutSchema(user_id="hacker_99", cart_id="cart_123")
+    res = process_cart_checkout(req)
+    assert "Error: You are not authorized to checkout cart cart_123" in res
+    assert "cart_123" not in processed_orders
+
+def test_checkout_success_no_discount():
+    req = ProcessCheckoutSchema(user_id="user_123", cart_id="cart_123")
+    res = process_cart_checkout(req)
+    assert "Success" in res
+    assert "Final total: $100.00" in res
+    assert "Awarded 100 loyalty points" in res
+    assert user_loyalty_points["user_123"] == 100
+    assert "cart_123" in processed_orders
+
+def test_checkout_success_with_discount():
+    req = ProcessCheckoutSchema(user_id="user_456", cart_id="cart_456", discount_code="WELCOME50")
+    res = process_cart_checkout(req)
+    assert "Success" in res
+    assert "Final total: $150.00" in res # 200 - 50
+    assert "Awarded 150 loyalty points" in res
+    assert user_loyalty_points["user_456"] == 150
+    assert "cart_456" in processed_orders
+
+def test_checkout_replay_attack():
+    req = ProcessCheckoutSchema(user_id="user_123", cart_id="cart_123")
+    process_cart_checkout(req)
+
+    # Try again
+    res = process_cart_checkout(req)
+    assert "Error: Cart cart_123 has already been checked out" in res
+
+def test_checkout_discount_invalid():
+    # Make a fresh cart for testing
+    mock_carts["cart_999"] = {"user_id": "user_999", "total": 50.0}
+    req = ProcessCheckoutSchema(user_id="user_999", cart_id="cart_999", discount_code="INVALID")
+    res = process_cart_checkout(req)
+    assert "Warning: Discount code is invalid or already used" in res
+    assert "cart_999" not in processed_orders # Still not processed

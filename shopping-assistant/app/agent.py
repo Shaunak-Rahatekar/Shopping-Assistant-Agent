@@ -38,6 +38,14 @@ redeemed_codes = set()
 user_loyalty_points: dict[str, int] = {}
 processed_transactions: set[str] = set()
 
+# In-memory store for tracking carts and processed orders
+mock_carts: dict[str, dict] = {
+    "cart_123": {"user_id": "user_123", "total": 100.0},
+    "cart_456": {"user_id": "user_456", "total": 200.0}
+}
+processed_orders: set[str] = set()
+
+
 class AwardPointsSchema(BaseModel):
     user_id: str = Field(..., min_length=1, description="The registered user ID.")
     points: int = Field(..., gt=0, description="The number of points to award (must be strictly positive).")
@@ -54,6 +62,55 @@ def award_loyalty_points(request: AwardPointsSchema) -> str:
 
     return f"Success: Awarded {request.points} points to user {request.user_id}. New balance: {user_loyalty_points[request.user_id]}."
 
+
+class ProcessCheckoutSchema(BaseModel):
+    user_id: str = Field(..., min_length=1, description="The registered user ID.")
+    cart_id: str = Field(..., min_length=1, description="The ID of the cart to checkout.")
+    discount_code: str | None = Field(default=None, description="Optional discount code to apply.")
+
+def process_cart_checkout(request: ProcessCheckoutSchema) -> str:
+    """Processes a cart checkout, optionally applying a discount code."""
+    if request.cart_id not in mock_carts:
+        return f"Error: Cart {request.cart_id} not found."
+
+    cart = mock_carts[request.cart_id]
+
+    # IDOR Protection: User must own the cart
+    if cart["user_id"] != request.user_id:
+        return f"Error: You are not authorized to checkout cart {request.cart_id}."
+
+    # Replay Attack Prevention: Cart can only be checked out once
+    if request.cart_id in processed_orders:
+        return f"Error: Cart {request.cart_id} has already been checked out."
+
+    total = cart["total"]
+
+    if request.discount_code:
+        # Check discount validity by actually attempting to redeem it
+        redeem_result = redeem_discount_code(request.discount_code, request.user_id)
+        if "Error:" in redeem_result:
+            return f"Warning: Discount code is invalid or already used. Full price is ${total:.2f}. Please ask the user if they want to proceed without a discount."
+
+        # Apply discount amount
+        code_upper = request.discount_code.upper()
+        if code_upper == "WELCOME50":
+            total = max(0.0, total - 50.0)
+        elif code_upper == "SUMMER20":
+            total = max(0.0, total * 0.8) # 20% off
+
+    # Finalize checkout
+    processed_orders.add(request.cart_id)
+
+    # Award loyalty points automatically (Standard Practice)
+    points_to_award = max(1, int(total)) # 1 point per dollar, min 1 point if free
+    award_req = AwardPointsSchema(
+        user_id=request.user_id,
+        points=points_to_award,
+        transaction_id=f"checkout_{request.cart_id}"
+    )
+    award_loyalty_points(award_req)
+
+    return f"Success: Order processed for cart {request.cart_id}. Final total: ${total:.2f}. Awarded {points_to_award} loyalty points."
 
 def redeem_discount_code(code: str, user_id: str) -> str:
     """Redeems a single-use discount code for a registered user.
@@ -91,7 +148,7 @@ root_agent = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction="You are an AI shopping assistant for a retail store. You help users with their shopping needs and can redeem single-use discount codes for registered users.",
-    tools=[redeem_discount_code, award_loyalty_points],
+    tools=[redeem_discount_code, award_loyalty_points, process_cart_checkout],
 )
 
 app = App(
