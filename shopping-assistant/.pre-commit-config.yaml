@@ -3,16 +3,16 @@ repos:
     hooks:
       - id: end-of-file-fixer
         name: end-of-file-fixer
-        entry: shopping-assistant/.venv/Scripts/end-of-file-fixer.exe
+        entry: uv run --project shopping-assistant end-of-file-fixer
         language: system
         types: [text]
       - id: trailing-whitespace
         name: trailing-whitespace
-        entry: shopping-assistant/.venv/Scripts/trailing-whitespace-fixer.exe
+        entry: uv run --project shopping-assistant trailing-whitespace-fixer
         language: system
         types: [text]
       - id: semgrep
         name: semgrep
-        entry: shopping-assistant/.venv/Scripts/python.exe shopping-assistant/.venv/Scripts/semgrep scan --error --config shopping-assistant/.semgrep/rules.yaml
+        entry: uv run --project shopping-assistant semgrep scan --error --config shopping-assistant/.semgrep/rules.yaml
         language: system
         types: [python]

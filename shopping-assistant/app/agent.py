@@ -67,7 +67,6 @@ root_agent = Agent(
     name="shopping_assistant",
     model=Gemini(
         model="gemini-flash-latest",
-        api_key=os.environ.get("GEMINI_API_KEY"),
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction="You are an AI shopping assistant for a retail store. You help users with their shopping needs and can redeem single-use discount codes for registered users.",
