@@ -4,7 +4,7 @@ A secure-by-design AI shopping assistant agent built with Google ADK 2.0. This a
 
 ## Project Structure
 
-- `shopping-assistant/app/agent.py`: Core agent logic and orchestration, including the `redeem_discount_code` tool.
+- `shopping-assistant/app/agent.py`: Core agent logic and orchestration, including the `redeem_discount_code`, `award_loyalty_points`, and `process_cart_checkout` tools.
 - `shopping-assistant/tests/test_agent.py`: Outcome-based security test suite validating business boundaries and preventing replay attacks.
 - `shopping-assistant/threat_model.md`: A structured STRIDE threat modeling assessment of the agent's architecture.
 - `shopping-assistant/.agents/CONTEXT.md`: Local secure coding standards and paved roads.
