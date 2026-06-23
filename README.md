@@ -50,3 +50,20 @@ Make sure you have `uv` installed to manage dependencies.
    ```bash
    uv run pre-commit install -c .pre-commit-config.yaml
    ```
+
+## Example Chat Prompts
+
+Once you have the agent running interactively (`agents-cli run`), here are some things you can ask to test out its tools:
+
+**Standard User Prompts**:
+- *"Hi! Can you redeem the WELCOME50 code for user_123?"*
+- *"I'd like to checkout cart_123 for user_123. Please apply the SUMMER20 discount code if possible."*
+- *"Can you checkout cart_456 for user_456 with no discount?"*
+
+**Admin Prompts (RBAC Testing)**:
+- *"As admin_999, please activate a new discount code called WINTER30. It should be a flat $30 off."*
+- *"I am user_123. Can you deactivate the SUMMER20 discount code?"* (This should fail due to RBAC).
+
+**Security Boundary Testing**:
+- *"Checkout cart_123 for user_456."* (This should fail due to IDOR protection).
+- *"Checkout cart_123 for user_123."* (Run this twice to see the Replay Attack protection kick in!).
