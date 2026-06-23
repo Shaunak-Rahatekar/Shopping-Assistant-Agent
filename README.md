@@ -30,12 +30,22 @@ Make sure you have `uv` installed to manage dependencies.
    uv sync
    ```
 
-2. **Run tests**:
+2. **Run the Agent**:
+   To start an interactive chat session with the Shopping Assistant:
+   ```bash
+   # Ensure your GOOGLE_API_KEY is set first
+   $env:GOOGLE_API_KEY="your-api-key-here"  # Windows PowerShell
+   export GOOGLE_API_KEY="your-api-key-here"  # Mac/Linux
+
+   uv run agents-cli run
+   ```
+
+3. **Run tests**:
    ```bash
    uv run pytest tests/
    ```
 
-3. **Install Pre-Commit hooks**:
+4. **Install Pre-Commit hooks**:
    ```bash
    uv run pre-commit install -c .pre-commit-config.yaml
    ```
