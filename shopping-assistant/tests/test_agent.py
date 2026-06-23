@@ -9,7 +9,11 @@ from app.agent import (
     process_cart_checkout,
     ProcessCheckoutSchema,
     mock_carts,
-    processed_orders
+    processed_orders,
+    update_discount_status,
+    UpdateDiscountSchema,
+    active_discount_codes,
+    admin_roles
 )
 
 @pytest.fixture(autouse=True)
@@ -22,6 +26,9 @@ def reset_state():
     mock_carts.clear()
     mock_carts["cart_123"] = {"user_id": "user_123", "total": 100.0}
     mock_carts["cart_456"] = {"user_id": "user_456", "total": 200.0}
+    active_discount_codes.clear()
+    active_discount_codes["WELCOME50"] = {"type": "flat", "value": 50.0}
+    active_discount_codes["SUMMER20"] = {"type": "percent", "value": 0.20}
 
 def test_security_boundary_missing_user_id():
     """Test that redemption fails if an empty or missing user_id is provided."""
@@ -123,3 +130,40 @@ def test_checkout_discount_invalid():
     res = process_cart_checkout(req)
     assert "Warning: Discount code is invalid or already used" in res
     assert "cart_999" not in processed_orders # Still not processed
+
+def test_update_discount_status_rbac_failure():
+    req = UpdateDiscountSchema(user_id="hacker_99", code="NEWCODE", is_active=True, discount_type="flat", discount_value=10.0)
+    res = update_discount_status(req)
+    assert "Error: User hacker_99 is not an authorized administrator" in res
+    assert "NEWCODE" not in active_discount_codes
+
+def test_update_discount_status_activation_and_checkout():
+    # Admin activates a new code
+    req = UpdateDiscountSchema(user_id="admin_999", code="WINTER30", is_active=True, discount_type="flat", discount_value=30.0)
+    res = update_discount_status(req)
+    assert "Success: Discount code WINTER30 is now active" in res
+    assert "WINTER30" in active_discount_codes
+
+    # User checks out with it
+    mock_carts["cart_777"] = {"user_id": "user_777", "total": 100.0}
+    checkout_req = ProcessCheckoutSchema(user_id="user_777", cart_id="cart_777", discount_code="WINTER30")
+    checkout_res = process_cart_checkout(checkout_req)
+    assert "Final total: $70.00" in checkout_res # 100 - 30
+
+def test_update_discount_status_deactivation():
+    # Admin deactivates SUMMER20
+    req = UpdateDiscountSchema(user_id="admin_999", code="SUMMER20", is_active=False)
+    res = update_discount_status(req)
+    assert "Success: Discount code SUMMER20 is now deactivated" in res
+    assert "SUMMER20" not in active_discount_codes
+
+    # Try to redeem deactivated code
+    res_redeem = redeem_discount_code("SUMMER20", "user_123")
+    assert "Error: SUMMER20 is not a recognized discount code" in res_redeem
+
+def test_update_discount_status_missing_fields_on_new():
+    # Admin tries to activate without type/value
+    req = UpdateDiscountSchema(user_id="admin_999", code="NEWCODE", is_active=True)
+    res = update_discount_status(req)
+    assert "Error: discount_type and discount_value are required when activating a new code" in res
+    assert "NEWCODE" not in active_discount_codes

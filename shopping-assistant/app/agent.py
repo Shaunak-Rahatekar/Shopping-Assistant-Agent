@@ -21,6 +21,7 @@ from google.adk.apps import App
 from google.adk.models import Gemini
 from google.genai import types
 from pydantic import BaseModel, Field
+from typing import Literal
 
 import os
 import google.auth
@@ -45,6 +46,13 @@ mock_carts: dict[str, dict] = {
 }
 processed_orders: set[str] = set()
 
+# Admin RBAC state and dynamic discount store
+admin_roles = {"admin_999"}
+active_discount_codes: dict[str, dict] = {
+    "WELCOME50": {"type": "flat", "value": 50.0},
+    "SUMMER20": {"type": "percent", "value": 0.20}
+}
+
 
 class AwardPointsSchema(BaseModel):
     user_id: str = Field(..., min_length=1, description="The registered user ID.")
@@ -62,6 +70,34 @@ def award_loyalty_points(request: AwardPointsSchema) -> str:
 
     return f"Success: Awarded {request.points} points to user {request.user_id}. New balance: {user_loyalty_points[request.user_id]}."
 
+
+class UpdateDiscountSchema(BaseModel):
+    user_id: str = Field(..., min_length=1, description="The user making the request.")
+    code: str = Field(..., min_length=1, description="The discount code to modify.")
+    is_active: bool = Field(..., description="True to activate, False to deactivate.")
+    discount_type: Literal["flat", "percent"] | None = Field(default=None, description="Type of discount. Required if activating a new code.")
+    discount_value: float | None = Field(default=None, description="Value of the discount. Required if activating a new code.")
+
+def update_discount_status(request: UpdateDiscountSchema) -> str:
+    """Allows administrators to activate or deactivate discount codes."""
+    if request.user_id not in admin_roles:
+        return f"Error: User {request.user_id} is not an authorized administrator."
+
+    code_upper = request.code.upper()
+
+    if request.is_active:
+        if code_upper not in active_discount_codes:
+            if request.discount_type is None or request.discount_value is None:
+                return "Error: discount_type and discount_value are required when activating a new code."
+            active_discount_codes[code_upper] = {
+                "type": request.discount_type,
+                "value": request.discount_value
+            }
+        return f"Success: Discount code {code_upper} is now active."
+    else:
+        if code_upper in active_discount_codes:
+            del active_discount_codes[code_upper]
+        return f"Success: Discount code {code_upper} is now deactivated."
 
 class ProcessCheckoutSchema(BaseModel):
     user_id: str = Field(..., min_length=1, description="The registered user ID.")
@@ -93,10 +129,12 @@ def process_cart_checkout(request: ProcessCheckoutSchema) -> str:
 
         # Apply discount amount
         code_upper = request.discount_code.upper()
-        if code_upper == "WELCOME50":
-            total = max(0.0, total - 50.0)
-        elif code_upper == "SUMMER20":
-            total = max(0.0, total * 0.8) # 20% off
+        if code_upper in active_discount_codes:
+            discount_info = active_discount_codes[code_upper]
+            if discount_info["type"] == "flat":
+                total = max(0.0, total - discount_info["value"])
+            elif discount_info["type"] == "percent":
+                total = max(0.0, total * (1.0 - discount_info["value"]))
 
     # Finalize checkout
     processed_orders.add(request.cart_id)
@@ -122,13 +160,11 @@ def redeem_discount_code(code: str, user_id: str) -> str:
     Returns:
         A string indicating the result of the redemption attempt.
     """
-    valid_codes = {"WELCOME50", "SUMMER20"}
-
     if not user_id:
         return "Error: A registered user ID is required."
 
     code_upper = code.upper()
-    if code_upper not in valid_codes:
+    if code_upper not in active_discount_codes:
         return f"Error: {code} is not a recognized discount code."
 
     # Check if this specific code has already been redeemed
@@ -148,7 +184,7 @@ root_agent = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction="You are an AI shopping assistant for a retail store. You help users with their shopping needs and can redeem single-use discount codes for registered users.",
-    tools=[redeem_discount_code, award_loyalty_points, process_cart_checkout],
+    tools=[redeem_discount_code, award_loyalty_points, process_cart_checkout, update_discount_status],
 )
 
 app = App(
