@@ -4,7 +4,7 @@ A secure-by-design AI shopping assistant agent built with Google ADK 2.0. This a
 
 ## Project Structure
 
-- `shopping-assistant/app/agent.py`: Core agent logic and orchestration, including the `redeem_discount_code`, `award_loyalty_points`, and `process_cart_checkout` tools.
+- `shopping-assistant/app/agent.py`: Core agent logic and orchestration, including the `redeem_discount_code`, `award_loyalty_points`, `process_cart_checkout`, and `update_discount_status` tools.
 - `shopping-assistant/tests/test_agent.py`: Outcome-based security test suite validating business boundaries and preventing replay attacks.
 - `shopping-assistant/threat_model.md`: A structured STRIDE threat modeling assessment of the agent's architecture.
 - `shopping-assistant/.agents/CONTEXT.md`: Local secure coding standards and paved roads.
@@ -15,10 +15,11 @@ A secure-by-design AI shopping assistant agent built with Google ADK 2.0. This a
 ## Security First
 
 This project enforces strict security guardrails during development:
-1. **Tool Input Validation**: All tool parameters are strictly validated to prevent boundary exploits.
-2. **Pre-Commit Remediation Loop**: Security scans (Semgrep) run locally on every commit. Violations automatically block the commit and mandate a refactoring loop.
-3. **Agent Hooks**: Run commands are intercepted and validated by our script to prevent destructive actions (like `rm -rf /`).
-4. **Threat Modeling**: The architecture is continuously evaluated using the STRIDE framework to ensure edge cases are handled securely.
+1. **Tool Input Validation**: All tool parameters are strictly validated via Pydantic to prevent boundary exploits.
+2. **Role-Based Access Control (RBAC)**: Administrative tools (e.g., `update_discount_status`) enforce strict authorization checks to prevent privilege escalation.
+3. **Pre-Commit Remediation Loop**: Security scans (Semgrep) run locally on every commit. Violations automatically block the commit and mandate a refactoring loop.
+4. **Agent Hooks**: Run commands are intercepted and validated by our script to prevent destructive actions (like `rm -rf /`).
+5. **Threat Modeling**: The architecture is continuously evaluated using the STRIDE framework to ensure edge cases are handled securely.
 
 ## Development & Usage
 
